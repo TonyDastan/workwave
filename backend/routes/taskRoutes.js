@@ -9,9 +9,11 @@ const {
   applyForTask,
   assignWorker,
   updateTaskStatus,
+  rateWorker
 } = require('../controllers/taskController');
 const auth = require('../middleware/auth');
 const checkRole = require('../middleware/checkRole');
+const { protect } = require('../middleware/authMiddleware');
 
 // Public routes
 router.get('/', getTasks);
@@ -28,5 +30,8 @@ router.put('/:id/assign', auth, checkRole(['client']), assignWorker);
 
 // Protected routes - task participants
 router.put('/:id/status', auth, updateTaskStatus);
+
+// Protected routes - rate worker
+router.post('/:id/rate', protect, rateWorker);
 
 module.exports = router; 

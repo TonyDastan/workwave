@@ -320,6 +320,62 @@ const updateTaskStatus = async (req, res) => {
   }
 };
 
+// @desc    Rate a worker for a completed task
+// @route   POST /api/tasks/:id/rate
+// @access  Private (Task owner only)
+const rateWorker = async (req, res) => {
+  try {
+    const { rating } = req.body;
+    
+    const task = await Task.findById(req.params.id);
+    
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    
+    // Check if user is task owner
+    if (task.client.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to rate this task' });
+    }
+    
+    // Check if task is completed
+    if (task.status !== 'completed') {
+      return res.status(400).json({ message: 'Can only rate completed tasks' });
+    }
+    
+    // Check if task already has a rating
+    if (task.rating) {
+      return res.status(400).json({ message: 'Task has already been rated' });
+    }
+    
+    // Validate rating
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'Rating must be between 1 and 5' });
+    }
+    
+    // Update task with rating
+    task.rating = rating;
+    
+    // Update worker's average rating
+    if (task.worker) {
+      const worker = await User.findById(task.worker);
+      if (worker) {
+        const workerTasks = await Task.find({ worker: task.worker, rating: { $exists: true } });
+        const totalRating = workerTasks.reduce((sum, t) => sum + t.rating, 0) + rating;
+        worker.rating = totalRating / (workerTasks.length + 1);
+        await worker.save();
+      }
+    }
+    
+    const updatedTask = await task.save();
+    
+    res.json(updatedTask);
+  } catch (error) {
+    console.error('Rate worker error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 module.exports = {
   getTasks,
   getTaskById,
@@ -329,4 +385,5 @@ module.exports = {
   applyForTask,
   assignWorker,
   updateTaskStatus,
+  rateWorker
 }; 
