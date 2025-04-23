@@ -376,6 +376,55 @@ const rateWorker = async (req, res) => {
   }
 };
 
+// @desc    Accept a proposal
+// @route   PUT /api/tasks/:id/accept
+// @access  Private (Client only)
+const acceptProposal = async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    
+    // Check if user is task owner (client)
+    if (task.client.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Only the client who created the task can approve proposals' });
+    }
+    
+    // Check if task is open
+    if (task.status !== 'open') {
+      return res.status(400).json({ message: 'This task is no longer accepting proposals' });
+    }
+    
+    const proposal = task.applicants.find(
+      (applicant) => applicant.worker.toString() === req.body.workerId
+    );
+    
+    if (!proposal) {
+      return res.status(400).json({ message: 'Proposal not found' });
+    }
+    
+    // Update task status and assign worker
+    task.worker = req.body.workerId;
+    task.status = 'assigned';
+    
+    // Update all other proposals to rejected
+    task.applicants.forEach(applicant => {
+      if (applicant.worker.toString() !== req.body.workerId) {
+        applicant.status = 'rejected';
+      }
+    });
+    
+    const updatedTask = await task.save();
+    
+    res.json(updatedTask);
+  } catch (error) {
+    console.error('Accept proposal error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 module.exports = {
   getTasks,
   getTaskById,
@@ -385,5 +434,6 @@ module.exports = {
   applyForTask,
   assignWorker,
   updateTaskStatus,
-  rateWorker
+  rateWorker,
+  acceptProposal
 }; 
