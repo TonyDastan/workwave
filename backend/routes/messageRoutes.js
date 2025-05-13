@@ -1,17 +1,20 @@
 const express = require('express');
 const router = express.Router();
+const { auth } = require('../middleware/auth');
 const {
-  sendMessage,
-  getConversation,
-  getConversations,
-  markMessageAsRead,
+    sendMessage,
+    getTaskMessages,
+    getUnreadCount,
+    markAsRead
 } = require('../controllers/messageController');
-const auth = require('../middleware/auth');
 
-// All protected routes
-router.post('/', auth, sendMessage);
-router.get('/', auth, getConversations);
-router.get('/:userId', auth, getConversation);
-router.put('/:messageId/read', auth, markMessageAsRead);
+// All routes require authentication
+router.use(auth);
+
+// Message routes
+router.post('/', sendMessage);
+router.get('/task/:taskId', getTaskMessages);
+router.get('/unread', getUnreadCount);
+router.put('/read', markAsRead);
 
 module.exports = router; 

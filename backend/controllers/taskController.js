@@ -6,8 +6,21 @@ const User = require('../models/User');
 // @access  Public
 const getTasks = async (req, res) => {
   try {
-    const { category, location, status, minBudget, maxBudget, skills, isUrgent, search } = req.query;
-    
+    const {
+      status,
+      category,
+      location,
+      minBudget,
+      maxBudget,
+      skills,
+      isUrgent,
+      search,
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
     // Build filter object
     const filter = {};
     
@@ -36,13 +49,28 @@ const getTasks = async (req, res) => {
         { description: { $regex: search, $options: 'i' } }
       ];
     }
-    
+
+    // Build sort object
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    // Execute query with pagination
     const tasks = await Task.find(filter)
+      .sort(sort)
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
       .populate('client', 'name email rating')
-      .populate('worker', 'name email rating')
-      .sort({ createdAt: -1 });
-      
-    res.json(tasks);
+      .populate('worker', 'name email rating');
+
+    // Get total count for pagination
+    const total = await Task.countDocuments(filter);
+
+    res.json({
+      tasks,
+      currentPage: page,
+      totalPages: Math.ceil(total / limit),
+      totalTasks: total
+    });
   } catch (error) {
     console.error('Get tasks error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });

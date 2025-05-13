@@ -11,7 +11,7 @@ const {
   updateTaskStatus,
   rateWorker
 } = require('../controllers/taskController');
-const auth = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 const checkRole = require('../middleware/checkRole');
 const { protect } = require('../middleware/authMiddleware');
 

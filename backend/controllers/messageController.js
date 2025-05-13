@@ -1,37 +1,48 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
+const Task = require('../models/Task');
 
 // @desc    Send a new message
 // @route   POST /api/messages
 // @access  Private
 const sendMessage = async (req, res) => {
   try {
-    const { recipientId, content, taskId } = req.body;
+    const { receiverId, taskId, content, attachments } = req.body;
     
-    // Check if recipient exists
-    const recipient = await User.findById(recipientId);
-    
-    if (!recipient) {
-      return res.status(404).json({ message: 'Recipient not found' });
+    // Verify task exists and user is part of it
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
     }
-    
-    // Create message
-    const message = await Message.create({
+
+    // Check if user is authorized to send message (must be client or worker of the task)
+    if (task.client.toString() !== req.user._id.toString() && 
+        task.worker.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to send messages for this task' });
+    }
+
+    // Check if receiver is the other party in the task
+    if (receiverId !== task.client.toString() && receiverId !== task.worker.toString()) {
+      return res.status(403).json({ message: 'Invalid receiver for this task' });
+    }
+
+    const message = new Message({
       sender: req.user._id,
-      recipient: recipientId,
+      receiver: receiverId,
+      task: taskId,
       content,
-      task: taskId || null
+      attachments
     });
-    
-    // Populate sender info
-    const populatedMessage = await Message.findById(message._id)
-      .populate('sender', 'name profileImage')
-      .populate('recipient', 'name profileImage');
-    
-    res.status(201).json(populatedMessage);
+
+    await message.save();
+
+    // Populate sender and receiver details
+    await message.populate('sender', 'name email');
+    await message.populate('receiver', 'name email');
+
+    res.status(201).json(message);
   } catch (error) {
-    console.error('Send message error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(400).json({ message: 'Error sending message', error: error.message });
   }
 };
 
@@ -158,9 +169,86 @@ const markMessageAsRead = async (req, res) => {
   }
 };
 
+// Get messages for a task
+const getTaskMessages = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const { page = 1, limit = 50 } = req.query;
+
+    // Verify task exists and user is part of it
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Check if user is authorized to view messages
+    if (task.client.toString() !== req.user._id.toString() && 
+        task.worker.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to view messages for this task' });
+    }
+
+    const messages = await Message.find({ task: taskId })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .populate('sender', 'name email')
+      .populate('receiver', 'name email');
+
+    // Mark messages as read
+    await Message.updateMany(
+      { 
+        task: taskId, 
+        receiver: req.user._id,
+        isRead: false 
+      },
+      { isRead: true }
+    );
+
+    res.json(messages);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching messages', error: error.message });
+  }
+};
+
+// Get unread message count
+const getUnreadCount = async (req, res) => {
+  try {
+    const count = await Message.countDocuments({
+      receiver: req.user._id,
+      isRead: false
+    });
+
+    res.json({ unreadCount: count });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching unread count', error: error.message });
+  }
+};
+
+// Mark messages as read
+const markAsRead = async (req, res) => {
+  try {
+    const { messageIds } = req.body;
+
+    await Message.updateMany(
+      {
+        _id: { $in: messageIds },
+        receiver: req.user._id
+      },
+      { isRead: true }
+    );
+
+    res.json({ message: 'Messages marked as read' });
+  } catch (error) {
+    res.status(400).json({ message: 'Error marking messages as read', error: error.message });
+  }
+};
+
 module.exports = {
   sendMessage,
   getConversation,
   getConversations,
   markMessageAsRead,
+  getTaskMessages,
+  getUnreadCount,
+  markAsRead,
 }; 

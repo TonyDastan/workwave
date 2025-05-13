@@ -2,65 +2,62 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
-  username: {
+  name: {
     type: String,
-    required: [true, 'Username is required'],
-    unique: true,
-    trim: true,
-    minlength: [3, 'Username must be at least 3 characters long']
+    required: true,
+    trim: true
   },
   email: {
     type: String,
-    required: [true, 'Email is required'],
+    required: true,
     unique: true,
     trim: true,
-    lowercase: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
+    lowercase: true
   },
   password: {
     type: String,
-    required: [true, 'Password is required'],
-    minlength: [6, 'Password must be at least 6 characters long']
-  },
-  firstName: {
-    type: String,
-    required: [true, 'First name is required'],
-    trim: true
-  },
-  lastName: {
-    type: String,
-    required: [true, 'Last name is required'],
-    trim: true
-  },
-  phone: {
-    type: String,
-    required: [true, 'Phone number is required'],
-    match: [/^\+?[1-9]\d{1,14}$/, 'Please enter a valid phone number']
+    required: true,
+    minlength: 6
   },
   role: {
     type: String,
-    required: [true, 'Role is required'],
     enum: ['client', 'worker'],
     default: 'client'
   },
-  profileImage: {
+  phone: {
     type: String,
-    default: 'assets/images/default-avatar.png'
+    trim: true
   },
+  rating: {
+    type: Number,
+    default: 0
+  },
+  completedTasks: {
+    type: Number,
+    default: 0
+  },
+  skills: [{
+    type: String,
+    trim: true
+  }],
   bio: {
     type: String,
-    maxlength: [500, 'Bio cannot exceed 500 characters']
+    trim: true
   },
-  location: String,
-  skills: [String],
-  hourlyRate: {
-    type: Number,
-    min: [0, 'Hourly rate cannot be negative']
+  profilePicture: {
+    type: String
   },
-  availability: String,
-  isEmailVerified: {
+  isVerified: {
     type: Boolean,
     default: false
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
 }, {
   timestamps: true
