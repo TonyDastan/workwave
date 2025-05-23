@@ -5,7 +5,7 @@ const checkRole = (roles) => {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
-    const hasRole = roles.includes(req.user.userType);
+    const hasRole = roles.includes(req.user.role);
     
     if (!hasRole) {
       return res.status(403).json({ message: 'Access denied. You do not have permission to perform this action' });

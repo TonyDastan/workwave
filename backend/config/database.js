@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
 const { ServerApiVersion } = require('mongodb');
+require('dotenv').config();
 
 // MongoDB Atlas connection string
-const MONGODB_URI = "mongodb+srv://gastondastan25:gastondastan25@workwave.4ugrc.mongodb.net/workwave?retryWrites=true&w=majority&appName=WorkWave";
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://gastondastan25:gastondastan25@workwave.4ugrc.mongodb.net/workwave?retryWrites=true&w=majority&appName=WorkWave";
 
 const connectDB = async () => {
     try {

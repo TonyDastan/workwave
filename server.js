@@ -17,7 +17,9 @@ connectDB();
 
 // Middleware
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? 'http://localhost:4202' : '*'
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['http://localhost:4200', 'http://localhost:4202'] 
+    : '*'
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -28,6 +30,7 @@ app.use(express.static(path.join(__dirname, 'frontend/workwave-client/dist/workw
 // API routes would go here
 // Example:
 app.use('/api/tasks', require('./backend/routes/tasks'));
+app.use('/api/auth', require('./backend/routes/authRoutes'));
 
 // Catch all other routes and return the index.html file
 app.get('*', (req, res) => {

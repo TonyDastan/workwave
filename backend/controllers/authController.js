@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const { cloudinary } = require('../config/cloudinary');
 
 // Generate JWT token
 const generateToken = (userId) => {
@@ -17,7 +18,7 @@ const generateToken = (userId) => {
 const register = async (req, res) => {
     try {
         console.log('Register request received:', req.body);
-        const { name, email, password, role, phone } = req.body;
+        const { firstName, lastName, email, password, role, phone } = req.body;
 
         // Check if user already exists
         const existingUser = await User.findOne({ email });
@@ -25,13 +26,18 @@ const register = async (req, res) => {
             return res.status(400).json({ message: 'User already exists' });
         }
 
+        // Get profile picture URL from Cloudinary if file was uploaded
+        const profilePictureUrl = req.file ? req.file.path : null;
+
         // Create new user
         const user = new User({
-            name,
+            firstName,
+            lastName,
             email,
             password,
             role: role || 'client',
-            phone
+            phone,
+            profilePicture: profilePictureUrl
         });
 
         await user.save();
@@ -44,9 +50,11 @@ const register = async (req, res) => {
             token,
             user: {
                 id: user._id,
-                name: user.name,
+                firstName: user.firstName,
+                lastName: user.lastName,
                 email: user.email,
-                role: user.role
+                role: user.role,
+                profilePicture: user.profilePicture
             }
         });
     } catch (error) {
@@ -80,7 +88,8 @@ const login = async (req, res) => {
             token,
             user: {
                 id: user._id,
-                name: user.name,
+                firstName: user.firstName,
+                lastName: user.lastName,
                 email: user.email,
                 role: user.role
             }

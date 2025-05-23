@@ -82,19 +82,73 @@ const getTasks = async (req, res) => {
 // @access  Public
 const getTaskById = async (req, res) => {
   try {
-    const task = await Task.findById(req.params.id)
-      .populate('client', 'name email rating')
-      .populate('worker', 'name email rating')
-      .populate('applicants.worker', 'name email rating');
-      
-    if (!task) {
-      return res.status(404).json({ message: 'Task not found' });
+    console.log('Getting task with ID:', req.params.id);
+    let task;
+    
+    // Try to find by MongoDB ObjectId first
+    if (req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      console.log('Searching by MongoDB ObjectId');
+      task = await Task.findById(req.params.id);
     }
     
-    res.json(task);
+    // If not found by ObjectId, try to find by numeric ID
+    if (!task) {
+      console.log('Searching by numeric ID');
+      const numericId = parseInt(req.params.id);
+      if (isNaN(numericId)) {
+        return res.status(400).json({ message: 'Invalid task ID format' });
+      }
+      task = await Task.findOne({ id: numericId });
+    }
+    
+    if (!task) {
+      console.log('Task not found');
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    console.log('Found task:', task._id);
+
+    // Populate related data
+    await task.populate('client', 'name email rating');
+    if (task.worker) {
+      await task.populate('worker', 'name email rating');
+    }
+    if (task.proposals && task.proposals.length > 0) {
+      await task.populate('proposals.worker', 'name email rating');
+    }
+
+    // Transform the response to match frontend expectations
+    const response = {
+      id: task.id || task._id,
+      title: task.title,
+      description: task.description,
+      category: task.category,
+      location: task.location,
+      budget: task.budget,
+      deadline: task.deadline,
+      status: task.status,
+      isUrgent: task.isUrgent,
+      skills: task.skills,
+      clientId: task.client._id,
+      clientName: task.client.name,
+      clientImage: task.client.profileImage,
+      workerId: task.worker?._id,
+      workerName: task.worker?.name,
+      workerImage: task.worker?.profileImage,
+      proposals: task.proposals,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt
+    };
+
+    console.log('Sending response:', response);
+    res.json(response);
   } catch (error) {
     console.error('Get task by ID error:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 
@@ -105,6 +159,16 @@ const createTask = async (req, res) => {
   try {
     const { title, description, category, location, budget, deadline, skills, isUrgent } = req.body;
     
+    // Validate required fields
+    if (!title || !description || !category || !location || !budget || !deadline) {
+      return res.status(400).json({ message: 'Please provide all required fields' });
+    }
+
+    // Validate skills array
+    if (!Array.isArray(skills) || skills.length === 0) {
+      return res.status(400).json({ message: 'Please select at least one required skill' });
+    }
+    
     // Create new task
     const task = await Task.create({
       title,
@@ -114,9 +178,12 @@ const createTask = async (req, res) => {
       location,
       budget,
       deadline,
-      skills: skills || [],
+      skills,
       isUrgent: isUrgent || false
     });
+    
+    // Populate client details
+    await task.populate('client', 'name email rating');
     
     res.status(201).json(task);
   } catch (error) {
@@ -213,30 +280,32 @@ const applyForTask = async (req, res) => {
     }
     
     // Check if user is worker
-    if (req.user.userType !== 'worker') {
+    if (req.user.role !== 'worker') {
       return res.status(403).json({ message: 'Only workers can apply for tasks' });
     }
     
     // Check if already applied
-    const alreadyApplied = task.applicants.find(
-      (applicant) => applicant.worker.toString() === req.user._id.toString()
+    const alreadyApplied = task.proposals.find(
+      (proposal) => proposal.worker.toString() === req.user._id.toString()
     );
     
     if (alreadyApplied) {
       return res.status(400).json({ message: 'You have already applied for this task' });
     }
     
-    // Add application
-    const { coverLetter } = req.body;
+    // Add proposal
+    const { amount, message } = req.body;
     
-    task.applicants.push({
+    task.proposals.push({
       worker: req.user._id,
-      coverLetter
+      amount,
+      message,
+      status: 'pending'
     });
     
     await task.save();
     
-    res.status(201).json({ message: 'Application submitted successfully' });
+    res.status(201).json({ message: 'Proposal submitted successfully' });
   } catch (error) {
     console.error('Apply for task error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -266,9 +335,9 @@ const assignWorker = async (req, res) => {
       return res.status(400).json({ message: 'This task has already been assigned or completed' });
     }
     
-    // Check if worker exists in applicants
-    const workerExists = task.applicants.find(
-      (applicant) => applicant.worker.toString() === workerId
+    // Check if worker exists in proposals
+    const workerExists = task.proposals.find(
+      (proposal) => proposal.worker.toString() === workerId
     );
     
     if (!workerExists) {
@@ -425,8 +494,8 @@ const acceptProposal = async (req, res) => {
       return res.status(400).json({ message: 'This task is no longer accepting proposals' });
     }
     
-    const proposal = task.applicants.find(
-      (applicant) => applicant.worker.toString() === req.body.workerId
+    const proposal = task.proposals.find(
+      (proposal) => proposal.worker.toString() === req.body.workerId
     );
     
     if (!proposal) {
@@ -438,9 +507,9 @@ const acceptProposal = async (req, res) => {
     task.status = 'assigned';
     
     // Update all other proposals to rejected
-    task.applicants.forEach(applicant => {
-      if (applicant.worker.toString() !== req.body.workerId) {
-        applicant.status = 'rejected';
+    task.proposals.forEach(proposal => {
+      if (proposal.worker.toString() !== req.body.workerId) {
+        proposal.status = 'rejected';
       }
     });
     

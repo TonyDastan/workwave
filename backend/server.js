@@ -3,6 +3,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const helmet = require('helmet');
 const path = require('path');
+const { cloudinary, upload } = require('./config/cloudinary');
 const connectDB = require('./config/database');
 const { apiLimiter } = require('./middleware/rateLimiter');
 require('dotenv').config();
@@ -17,10 +18,10 @@ app.use(helmet());
 
 // CORS configuration
 app.use(cors({
-  origin: ['http://localhost:4202', 'http://localhost:4200', 'http://localhost:4201'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    origin: ['http://localhost:4202', 'http://localhost:4200', 'http://localhost:4201'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 // Apply rate limiting to all routes
@@ -30,6 +31,12 @@ app.use(apiLimiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+
+// Create uploads directory if it doesn't exist
+const fs = require('fs');
+if (!fs.existsSync('uploads')) {
+  fs.mkdirSync('uploads');
+}
 
 // Detailed request logging
 app.use((req, res, next) => {
@@ -45,11 +52,13 @@ app.use((req, res, next) => {
 const authRoutes = require('./routes/authRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
+const taskRoutes = require('./routes/taskRoutes');
 
-// Mount API routes
-app.use('/api/auth', authRoutes);
+// Mount API routes with file upload middleware
+app.use('/api/auth', upload.single('profilePicture'), authRoutes);
 app.use('/api/messages', messageRoutes);
-app.use('/api/upload', uploadRoutes);
+app.use('/api/upload', upload.single('file'), uploadRoutes);
+app.use('/api/tasks', taskRoutes);
 
 // Test route to verify server is running
 app.get('/api/test', (req, res) => {
