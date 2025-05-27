@@ -6,7 +6,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
     "server": "nodemon server.js",
-    "client": "cd frontend/workwave-client && ng serve --port 4202",
+    "client": "cd frontend/workwave-client && node --max_old_space_size=8192 ./node_modules/@angular/cli/bin/ng serve --port 4202",
     "build": "cd frontend/workwave-client && ng build",
     "prod-build": "cd frontend/workwave-client && ng build --configuration production",
     "dev": "concurrently \"npm run server\" \"npm run client\""

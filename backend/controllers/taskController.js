@@ -293,19 +293,65 @@ const applyForTask = async (req, res) => {
       return res.status(400).json({ message: 'You have already applied for this task' });
     }
     
+    // Validate proposal data
+    const { 
+      coverLetter, 
+      proposedBudget, 
+      estimatedTime,
+      availability,
+      questions,
+      milestones 
+    } = req.body;
+
+    if (!coverLetter || !proposedBudget || !estimatedTime || !availability) {
+      return res.status(400).json({ message: 'Please provide all required fields' });
+    }
+
+    if (coverLetter.length < 50 || coverLetter.length > 1000) {
+      return res.status(400).json({ message: 'Cover letter must be between 50 and 1000 characters' });
+    }
+
+    if (proposedBudget < 1) {
+      return res.status(400).json({ message: 'Proposed budget must be greater than 0' });
+    }
+
+    if (!estimatedTime.match(/^[0-9]+ (hours|days|weeks)$/)) {
+      return res.status(400).json({ message: 'Invalid time format. Use format: number + (hours/days/weeks)' });
+    }
+
+    // Validate milestones if provided
+    if (milestones && Array.isArray(milestones)) {
+      for (const milestone of milestones) {
+        if (!milestone.title || !milestone.description || !milestone.deadline || !milestone.budget) {
+          return res.status(400).json({ message: 'Invalid milestone data' });
+        }
+      }
+    }
+    
     // Add proposal
-    const { amount, message } = req.body;
-    
-    task.proposals.push({
+    const proposal = {
       worker: req.user._id,
-      amount,
-      message,
-      status: 'pending'
-    });
+      coverLetter,
+      proposedBudget,
+      estimatedTime,
+      availability,
+      questions,
+      milestones,
+      status: 'pending',
+      workerName: req.user.name,
+      workerImage: req.user.profileImage,
+      workerRating: req.user.rating,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
     
+    task.proposals.push(proposal);
     await task.save();
+
+    // Populate worker details
+    await task.populate('proposals.worker', 'name email rating profileImage');
     
-    res.status(201).json({ message: 'Proposal submitted successfully' });
+    res.status(201).json(task);
   } catch (error) {
     console.error('Apply for task error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -522,6 +568,98 @@ const acceptProposal = async (req, res) => {
   }
 };
 
+// @desc    Reject a proposal
+// @route   POST /api/tasks/:id/proposals/:proposalId/reject
+// @access  Private (Task owner only)
+const rejectProposal = async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    
+    // Check if user is task owner
+    if (task.client.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to reject proposals for this task' });
+    }
+    
+    const proposal = task.proposals.find(
+      (p) => p._id.toString() === req.params.proposalId
+    );
+    
+    if (!proposal) {
+      return res.status(404).json({ message: 'Proposal not found' });
+    }
+    
+    // Update proposal status to rejected
+    proposal.status = 'rejected';
+    await task.save();
+    
+    res.json(task);
+  } catch (error) {
+    console.error('Reject proposal error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// @desc    Withdraw a proposal
+// @route   DELETE /api/tasks/:id/proposals/:proposalId
+// @access  Private (Worker only)
+const withdrawProposal = async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+    
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    
+    const proposal = task.proposals.find(
+      (p) => p._id.toString() === req.params.proposalId
+    );
+    
+    if (!proposal) {
+      return res.status(404).json({ message: 'Proposal not found' });
+    }
+    
+    // Check if user is the proposal owner
+    if (proposal.worker.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to withdraw this proposal' });
+    }
+    
+    // Remove the proposal
+    task.proposals = task.proposals.filter(
+      (p) => p._id.toString() !== req.params.proposalId
+    );
+    
+    await task.save();
+    
+    res.json({ message: 'Proposal withdrawn successfully' });
+  } catch (error) {
+    console.error('Withdraw proposal error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// @desc    Get all tasks with proposals for a client
+// @route   GET /api/tasks/with-proposals
+// @access  Private (Client only)
+const getTasksWithProposals = async (req, res) => {
+  try {
+    const tasks = await Task.find({ 
+      client: req.user._id,
+      'proposals.0': { $exists: true } // Only tasks with at least one proposal
+    })
+    .populate('proposals.worker', 'name email rating profileImage')
+    .sort('-createdAt');
+
+    res.json(tasks);
+  } catch (error) {
+    console.error('Get tasks with proposals error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 module.exports = {
   getTasks,
   getTaskById,
@@ -532,5 +670,8 @@ module.exports = {
   assignWorker,
   updateTaskStatus,
   rateWorker,
-  acceptProposal
+  acceptProposal,
+  rejectProposal,
+  withdrawProposal,
+  getTasksWithProposals
 }; 

@@ -9,28 +9,34 @@ const {
   applyForTask,
   assignWorker,
   updateTaskStatus,
-  rateWorker
+  rateWorker,
+  acceptProposal,
+  rejectProposal,
+  withdrawProposal,
+  getTasksWithProposals
 } = require('../controllers/taskController');
 const { auth } = require('../middleware/auth');
 const checkRole = require('../middleware/checkRole');
 
 // Public routes
 router.get('/', getTasks);
-router.get('/:id', getTaskById);
-
-// Protected routes - all users
-router.post('/:id/apply', auth, checkRole(['worker']), applyForTask);
 
 // Protected routes - clients only
 router.post('/', auth, checkRole(['client']), createTask);
+router.get('/with-proposals', auth, checkRole(['client']), getTasksWithProposals);
+
+// Task-specific routes
+router.get('/:id', getTaskById);
 router.put('/:id', auth, checkRole(['client']), updateTask);
 router.delete('/:id', auth, checkRole(['client']), deleteTask);
-router.put('/:id/assign', auth, checkRole(['client']), assignWorker);
+router.post('/:id/assign', auth, checkRole(['client']), assignWorker);
+router.post('/:id/rate', auth, checkRole(['client']), rateWorker);
 
-// Protected routes - task participants
-router.put('/:id/status', auth, updateTaskStatus);
-
-// Protected routes - rate worker
-router.post('/:id/rate', auth, rateWorker);
+// Proposal routes
+router.post('/:id/proposals', auth, checkRole(['worker']), applyForTask);
+router.delete('/:id/proposals/:proposalId', auth, checkRole(['worker']), withdrawProposal);
+router.post('/:id/proposals/:proposalId/accept', auth, acceptProposal);
+router.post('/:id/proposals/:proposalId/reject', auth, rejectProposal);
+router.post('/:id/status', auth, updateTaskStatus);
 
 module.exports = router; 

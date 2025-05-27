@@ -8,17 +8,21 @@ const connectDB = require('./config/database');
 const { apiLimiter } = require('./middleware/rateLimiter');
 require('dotenv').config();
 
-const app = express();
+// Import models
+const { Task, runMigration } = require('./models/Task');
+require('./models/User');
+require('./models/Message');
+// Proposal model will be added later when implemented
+// require('./models/Proposal');
 
-// Connect to MongoDB
-connectDB();
+const app = express();
 
 // Security middleware
 app.use(helmet());
 
 // CORS configuration
 app.use(cors({
-    origin: ['http://localhost:4202', 'http://localhost:4200', 'http://localhost:4201'],
+    origin: ['http://localhost:4202', 'http://localhost:4200', 'http://localhost:4201', 'http://localhost:5002', 'http://localhost:3000'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -89,8 +93,26 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-const PORT = process.env.PORT || 5002;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`CORS enabled for origins: http://localhost:4202, http://localhost:4200, http://localhost:4201`);
-}); 
+const PORT = process.env.PORT || 3000;
+
+// Connect to MongoDB and start server
+const startServer = async () => {
+  try {
+    await connectDB();
+    console.log('Connected to MongoDB successfully');
+    
+    // Run migrations after successful database connection
+    await runMigration();
+    console.log('Migrations completed successfully');
+    
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+      console.log(`CORS enabled for origins: http://localhost:4202, http://localhost:4200, http://localhost:4201, http://localhost:5002, http://localhost:3000`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer(); 
