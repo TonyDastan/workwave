@@ -1,4 +1,4 @@
-const Task = require('../models/Task');
+const { Task } = require('../models/Task');
 const User = require('../models/User');
 
 // @desc    Get all tasks
@@ -59,8 +59,8 @@ const getTasks = async (req, res) => {
       .sort(sort)
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
-      .populate('client', 'name email rating')
-      .populate('worker', 'name email rating');
+      .populate('clientId', 'name email rating profileImage')
+      .populate('workerId', 'name email rating profileImage');
 
     // Get total count for pagination
     const total = await Task.countDocuments(filter);
@@ -109,12 +109,12 @@ const getTaskById = async (req, res) => {
     console.log('Found task:', task._id);
 
     // Populate related data
-    await task.populate('client', 'name email rating');
+    await task.populate('clientId', 'name email rating profileImage');
     if (task.worker) {
-      await task.populate('worker', 'name email rating');
+      await task.populate('workerId', 'name email rating profileImage');
     }
     if (task.proposals && task.proposals.length > 0) {
-      await task.populate('proposals.worker', 'name email rating');
+      await task.populate('proposals.workerId', 'name email rating profileImage');
     }
 
     // Transform the response to match frontend expectations
@@ -129,12 +129,12 @@ const getTaskById = async (req, res) => {
       status: task.status,
       isUrgent: task.isUrgent,
       skills: task.skills,
-      clientId: task.client._id,
-      clientName: task.client.name,
-      clientImage: task.client.profileImage,
-      workerId: task.worker?._id,
-      workerName: task.worker?.name,
-      workerImage: task.worker?.profileImage,
+      clientId: task.clientId._id,
+      clientName: task.clientId.name,
+      clientImage: task.clientId.profileImage,
+      workerId: task.workerId?._id,
+      workerName: task.workerId?.name,
+      workerImage: task.workerId?.profileImage,
       proposals: task.proposals,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt
@@ -174,7 +174,7 @@ const createTask = async (req, res) => {
       title,
       description,
       category,
-      client: req.user._id,
+      clientId: req.user._id,
       location,
       budget,
       deadline,
@@ -183,7 +183,7 @@ const createTask = async (req, res) => {
     });
     
     // Populate client details
-    await task.populate('client', 'name email rating');
+    await task.populate('clientId', 'name email rating profileImage');
     
     res.status(201).json(task);
   } catch (error) {
@@ -204,7 +204,7 @@ const updateTask = async (req, res) => {
     }
     
     // Check if user is task owner
-    if (task.client.toString() !== req.user._id.toString()) {
+    if (task.clientId.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Not authorized to update this task' });
     }
     
@@ -245,7 +245,7 @@ const deleteTask = async (req, res) => {
     }
     
     // Check if user is task owner
-    if (task.client.toString() !== req.user._id.toString()) {
+    if (task.clientId.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Not authorized to delete this task' });
     }
     
@@ -268,9 +268,15 @@ const deleteTask = async (req, res) => {
 // @access  Private (Workers only)
 const applyForTask = async (req, res) => {
   try {
+    console.log('Applying for task with ID:', req.params.id);
+    console.log('Request body:', req.body);
+    console.log('User:', req.user);
+    
     const task = await Task.findById(req.params.id);
+    console.log('Found task:', task);
     
     if (!task) {
+      console.log('Task not found for ID:', req.params.id);
       return res.status(404).json({ message: 'Task not found' });
     }
     
@@ -286,7 +292,7 @@ const applyForTask = async (req, res) => {
     
     // Check if already applied
     const alreadyApplied = task.proposals.find(
-      (proposal) => proposal.worker.toString() === req.user._id.toString()
+      (proposal) => proposal.workerId.toString() === req.user._id.toString()
     );
     
     if (alreadyApplied) {
@@ -297,13 +303,10 @@ const applyForTask = async (req, res) => {
     const { 
       coverLetter, 
       proposedBudget, 
-      estimatedTime,
-      availability,
-      questions,
-      milestones 
+      estimatedTime
     } = req.body;
 
-    if (!coverLetter || !proposedBudget || !estimatedTime || !availability) {
+    if (!coverLetter || !proposedBudget || !estimatedTime) {
       return res.status(400).json({ message: 'Please provide all required fields' });
     }
 
@@ -318,27 +321,15 @@ const applyForTask = async (req, res) => {
     if (!estimatedTime.match(/^[0-9]+ (hours|days|weeks)$/)) {
       return res.status(400).json({ message: 'Invalid time format. Use format: number + (hours/days/weeks)' });
     }
-
-    // Validate milestones if provided
-    if (milestones && Array.isArray(milestones)) {
-      for (const milestone of milestones) {
-        if (!milestone.title || !milestone.description || !milestone.deadline || !milestone.budget) {
-          return res.status(400).json({ message: 'Invalid milestone data' });
-        }
-      }
-    }
     
     // Add proposal
     const proposal = {
-      worker: req.user._id,
+      workerId: req.user._id,
       coverLetter,
       proposedBudget,
       estimatedTime,
-      availability,
-      questions,
-      milestones,
       status: 'pending',
-      workerName: req.user.name,
+      workerName: `${req.user.firstName} ${req.user.lastName}`,
       workerImage: req.user.profileImage,
       workerRating: req.user.rating,
       createdAt: new Date(),
@@ -349,7 +340,7 @@ const applyForTask = async (req, res) => {
     await task.save();
 
     // Populate worker details
-    await task.populate('proposals.worker', 'name email rating profileImage');
+    await task.populate('proposals.workerId', 'firstName lastName email rating profileImage');
     
     res.status(201).json(task);
   } catch (error) {
@@ -372,7 +363,7 @@ const assignWorker = async (req, res) => {
     }
     
     // Check if user is task owner
-    if (task.client.toString() !== req.user._id.toString()) {
+    if (task.clientId.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Not authorized to assign workers for this task' });
     }
     
@@ -383,7 +374,7 @@ const assignWorker = async (req, res) => {
     
     // Check if worker exists in proposals
     const workerExists = task.proposals.find(
-      (proposal) => proposal.worker.toString() === workerId
+      (proposal) => proposal.workerId.toString() === workerId
     );
     
     if (!workerExists) {
@@ -427,7 +418,7 @@ const updateTaskStatus = async (req, res) => {
     }
     
     // Check authorization
-    const isClient = task.client.toString() === req.user._id.toString();
+    const isClient = task.clientId.toString() === req.user._id.toString();
     const isWorker = task.worker && task.worker.toString() === req.user._id.toString();
     
     if (!isClient && !isWorker) {
@@ -477,7 +468,7 @@ const rateWorker = async (req, res) => {
     }
     
     // Check if user is task owner
-    if (task.client.toString() !== req.user._id.toString()) {
+    if (task.clientId.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Not authorized to rate this task' });
     }
     
@@ -531,7 +522,7 @@ const acceptProposal = async (req, res) => {
     }
     
     // Check if user is task owner (client)
-    if (task.client.toString() !== req.user._id.toString()) {
+    if (task.clientId.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Only the client who created the task can approve proposals' });
     }
     
@@ -541,7 +532,7 @@ const acceptProposal = async (req, res) => {
     }
     
     const proposal = task.proposals.find(
-      (proposal) => proposal.worker.toString() === req.body.workerId
+      (proposal) => proposal.workerId.toString() === req.body.workerId
     );
     
     if (!proposal) {
@@ -554,7 +545,7 @@ const acceptProposal = async (req, res) => {
     
     // Update all other proposals to rejected
     task.proposals.forEach(proposal => {
-      if (proposal.worker.toString() !== req.body.workerId) {
+      if (proposal.workerId.toString() !== req.body.workerId) {
         proposal.status = 'rejected';
       }
     });
@@ -580,7 +571,7 @@ const rejectProposal = async (req, res) => {
     }
     
     // Check if user is task owner
-    if (task.client.toString() !== req.user._id.toString()) {
+    if (task.clientId.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Not authorized to reject proposals for this task' });
     }
     
@@ -623,7 +614,7 @@ const withdrawProposal = async (req, res) => {
     }
     
     // Check if user is the proposal owner
-    if (proposal.worker.toString() !== req.user._id.toString()) {
+    if (proposal.workerId.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Not authorized to withdraw this proposal' });
     }
     
@@ -647,10 +638,10 @@ const withdrawProposal = async (req, res) => {
 const getTasksWithProposals = async (req, res) => {
   try {
     const tasks = await Task.find({ 
-      client: req.user._id,
+      clientId: req.user._id,
       'proposals.0': { $exists: true } // Only tasks with at least one proposal
     })
-    .populate('proposals.worker', 'name email rating profileImage')
+    .populate('proposals.workerId', 'name email rating profileImage')
     .sort('-createdAt');
 
     res.json(tasks);

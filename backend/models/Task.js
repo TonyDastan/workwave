@@ -21,10 +21,11 @@ const milestoneSchema = new mongoose.Schema({
 });
 
 const proposalSchema = new mongoose.Schema({
-    worker: {
+    workerId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        required: true,
+        index: true
     },
     coverLetter: {
         type: String,
@@ -49,7 +50,7 @@ const proposalSchema = new mongoose.Schema({
     },
     availability: {
         type: String,
-        required: true,
+        required: false,
         minlength: 10
     },
     questions: {
@@ -63,7 +64,10 @@ const proposalSchema = new mongoose.Schema({
     },
     workerName: String,
     workerImage: String,
-    workerRating: Number,
+    workerRating: {
+        type: Number,
+        default: 0
+    },
     clientFeedback: String,
     isPreferred: {
         type: Boolean,
@@ -77,7 +81,7 @@ const proposalSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     }
-});
+}, { _id: true });
 
 const taskSchema = new mongoose.Schema({
     title: {
@@ -133,7 +137,10 @@ const taskSchema = new mongoose.Schema({
     skills: [{
         type: String
     }],
-    proposals: [proposalSchema],
+    proposals: {
+        type: [proposalSchema],
+        default: []
+    },
     rating: {
         type: Number,
         min: 1,
@@ -201,4 +208,4 @@ const runMigration = async () => {
     }
 };
 
-module.exports = { Task, runMigration }; 
+module.exports = { Task, runMigration, proposalSchema }; 

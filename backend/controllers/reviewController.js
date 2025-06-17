@@ -1,5 +1,5 @@
 const Review = require('../models/Review');
-const Task = require('../models/Task');
+const { Task } = require('../models/Task');
 const User = require('../models/User');
 
 // @desc    Create a new review

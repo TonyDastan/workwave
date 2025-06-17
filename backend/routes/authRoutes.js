@@ -6,7 +6,8 @@ const {
     login,
     getProfile,
     updateProfile,
-    changePassword
+    changePassword,
+    getUserById
 } = require('../controllers/authController');
 
 // Public routes
@@ -17,5 +18,6 @@ router.post('/login', login);
 router.get('/profile', auth, getProfile);
 router.put('/profile', auth, updateProfile);
 router.put('/change-password', auth, changePassword);
+router.get('/users/:id', auth, getUserById);
 
 module.exports = router; 

@@ -7,21 +7,9 @@ const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://gastondastan25:gas
 
 const connectDB = async () => {
     try {
-        console.log('Attempting to connect to MongoDB...');
+        console.log('Connecting to MongoDB...');
         
-        mongoose.connection.on('connecting', () => {
-            console.log('Connecting to MongoDB...');
-        });
-
-        mongoose.connection.on('connected', () => {
-            console.log('Successfully connected to MongoDB');
-        });
-
-        mongoose.connection.on('error', (err) => {
-            console.error('MongoDB connection error:', err);
-        });
-
-        const conn = await mongoose.connect(MONGODB_URI, {
+        await mongoose.connect(MONGODB_URI, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
             serverApi: {
@@ -32,13 +20,10 @@ const connectDB = async () => {
             serverSelectionTimeoutMS: 5000 // Timeout after 5s instead of 30s
         });
 
-        console.log(`MongoDB Connected: ${conn.connection.host}`);
-        console.log('Database:', conn.connection.name);
-        
-        return conn;
-    } catch (error) {
-        console.error(`MongoDB Connection Error: ${error.message}`);
-        console.error('Please make sure MongoDB is installed and running, or provide a valid MONGO_URI in the .env file');
+        console.log('MongoDB Connected Successfully');
+    } catch (err) {
+        console.error('MongoDB connection error:', err.message);
+        // Exit process with failure
         process.exit(1);
     }
 };

@@ -22,7 +22,7 @@ app.use(helmet());
 
 // CORS configuration
 app.use(cors({
-    origin: ['http://localhost:4202', 'http://localhost:4200', 'http://localhost:4201', 'http://localhost:5002', 'http://localhost:3000'],
+    origin: ['http://localhost:4202', 'http://localhost:4200', 'http://localhost:4201', 'http://localhost:5002'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -84,20 +84,21 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/workwave-client/dist/workwave-client')));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/workwave-client/dist/workwave-client/index.html'));
-  });
-}
-
-const PORT = process.env.PORT || 3000;
+// Set default port
+const PORT = process.env.PORT || 5002;
 
 // Connect to MongoDB and start server
 const startServer = async () => {
   try {
+    // Log environment variables (excluding sensitive data)
+    console.log('Environment variables loaded:', {
+      PORT: process.env.PORT || 5002,
+      NODE_ENV: process.env.NODE_ENV || 'development',
+      MONGODB_URI: process.env.MONGODB_URI ? '[SET]' : '[NOT SET]'
+    });
+
+    // Connect to MongoDB
+    console.log('Connecting to MongoDB...');
     await connectDB();
     console.log('Connected to MongoDB successfully');
     
@@ -105,9 +106,21 @@ const startServer = async () => {
     await runMigration();
     console.log('Migrations completed successfully');
     
-    app.listen(PORT, () => {
+    // Start server with port handling
+    const server = app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
-      console.log(`CORS enabled for origins: http://localhost:4202, http://localhost:4200, http://localhost:4201, http://localhost:5002, http://localhost:3000`);
+      console.log(`CORS enabled for origins: http://localhost:4202, http://localhost:4200, http://localhost:4201, http://localhost:5002`);
+    }).on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use. Please:
+        1. Check if another instance of the server is running
+        2. Stop any other services using port ${PORT}
+        3. Or set a different port in the .env file`);
+        process.exit(1);
+      } else {
+        console.error('Server error:', err);
+        process.exit(1);
+      }
     });
   } catch (error) {
     console.error('Failed to start server:', error);
