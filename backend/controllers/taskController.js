@@ -632,6 +632,41 @@ const withdrawProposal = async (req, res) => {
   }
 };
 
+// @desc    Get all proposals submitted by the current worker
+// @route   GET /api/tasks/worker/proposals
+// @access  Private (Worker only)
+const getWorkerProposals = async (req, res) => {
+  try {
+    const tasks = await Task.find(
+      { 'proposals.workerId': req.user._id },
+      { title: 1, status: 1, budget: 1, deadline: 1, category: 1, proposals: 1 }
+    )
+    .populate('clientId', 'firstName lastName email rating profilePicture')
+    .sort('-createdAt');
+
+    // Return only the matching proposal inside each task
+    const workerProposals = tasks.map(task => {
+      const proposal = task.proposals.find(
+        p => p.workerId.toString() === req.user._id.toString()
+      );
+      return {
+        taskId: task._id,
+        taskTitle: task.title,
+        taskStatus: task.status,
+        taskBudget: task.budget,
+        taskDeadline: task.deadline,
+        taskCategory: task.category,
+        proposal
+      };
+    });
+
+    res.json(workerProposals);
+  } catch (error) {
+    console.error('Get worker proposals error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 // @desc    Get all tasks with proposals for a client
 // @route   GET /api/tasks/with-proposals
 // @access  Private (Client only)
@@ -664,5 +699,6 @@ module.exports = {
   acceptProposal,
   rejectProposal,
   withdrawProposal,
-  getTasksWithProposals
+  getTasksWithProposals,
+  getWorkerProposals
 }; 
