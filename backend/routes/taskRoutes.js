@@ -21,30 +21,16 @@ const checkRole = require('../middleware/checkRole');
 
 // Public routes
 router.get('/', getTasks);
+// Protected static routes - Must come before /:id to avoid conflicts
+// We add auth middleware explicitly here since they are before the global router.use(auth)
+router.get('/worker/proposals', auth, checkRole(['worker']), getWorkerProposals);
+router.get('/with-proposals', auth, checkRole(['client']), getTasksWithProposals);
 
-// Protected routes
+// Public parameterized route
+router.get('/:id', getTaskById);
+
+// Protected routes (rest of the routes)
 router.use(auth);
-
-// Debug middleware - moved after auth
-router.use((req, res, next) => {
-  console.log('=== Task Route Debug ===');
-  console.log('Method:', req.method);
-  console.log('URL:', req.url);
-  console.log('Full Path:', req.originalUrl);
-  console.log('Params:', req.params);
-  console.log('Query:', req.query);
-  console.log('Body:', req.body);
-  console.log('Headers:', req.headers);
-  console.log('User:', req.user);
-  console.log('=====================');
-  next();
-});
-
-// Worker proposal routes - must come before /:id route
-router.get('/worker/proposals', checkRole(['worker']), getWorkerProposals);
-
-// Client-specific routes
-router.get('/with-proposals', checkRole(['client']), getTasksWithProposals);
 
 // Task management routes
 router.post('/', checkRole(['client']), createTask);
@@ -63,8 +49,5 @@ router.post('/:id/rate', checkRole(['client']), rateWorker);
 // Proposal management routes
 router.put('/:id/accept', checkRole(['client']), acceptProposal);
 router.post('/:id/proposals/:proposalId/reject', checkRole(['client']), rejectProposal);
-
-// Get task by ID - must come after all other routes
-router.get('/:id', getTaskById);
 
 module.exports = router; 

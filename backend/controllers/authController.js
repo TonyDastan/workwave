@@ -50,14 +50,7 @@ const register = async (req, res) => {
         res.status(201).json({
             message: 'User registered successfully',
             token,
-            user: {
-                id: user._id,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                email: user.email,
-                role: user.role,
-                profilePicture: user.profilePicture
-            }
+            user: user.toObject()
         });
     } catch (error) {
         console.error('Registration error:', error);
@@ -88,14 +81,7 @@ const login = async (req, res) => {
         res.json({
             message: 'Login successful',
             token,
-            user: {
-                id: user._id,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                email: user.email,
-                role: user.role,
-                profilePicture: user.profilePicture
-            }
+            user: user.toObject()
         });
     } catch (error) {
         res.status(500).json({ message: 'Error logging in', error: error.message });
