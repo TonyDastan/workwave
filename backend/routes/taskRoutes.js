@@ -61,7 +61,7 @@ router.put('/:id/status', updateTaskStatus);
 router.post('/:id/rate', checkRole(['client']), rateWorker);
 
 // Proposal management routes
-router.post('/:id/proposals/:proposalId/accept', checkRole(['client']), acceptProposal);
+router.put('/:id/accept', checkRole(['client']), acceptProposal);
 router.post('/:id/proposals/:proposalId/reject', checkRole(['client']), rejectProposal);
 
 // Get task by ID - must come after all other routes

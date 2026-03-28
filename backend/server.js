@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
@@ -6,7 +7,6 @@ const path = require('path');
 const { cloudinary, upload } = require('./config/cloudinary');
 const connectDB = require('./config/database');
 const { apiLimiter } = require('./middleware/rateLimiter');
-require('dotenv').config();
 
 // Import models
 const { Task, runMigration } = require('./models/Task');

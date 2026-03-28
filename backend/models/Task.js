@@ -63,7 +63,7 @@ const proposalSchema = new mongoose.Schema({
         default: 'pending'
     },
     workerName: String,
-    workerImage: String,
+    workerPicture: String,
     workerRating: {
         type: Number,
         default: 0

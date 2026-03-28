@@ -33,33 +33,53 @@ const sendMessage = async (req, res) => {
     // Check if user is authorized to send message:
     // 1. User is the client
     // 2. User is the assigned worker
-    // 3. Task is open and user is trying to contact the client
+    // 3. User has a proposal for this task
     const isClient = task.clientId.toString() === req.user._id.toString();
-    const isWorker = task.workerId && task.workerId.toString() === req.user._id.toString();
-    const isOpenTaskInquiry = task.status === 'open' && receiverId === task.clientId.toString();
+    const isAssignedWorker = task.workerId && task.workerId.toString() === req.user._id.toString();
+    const hasProposal = task.proposals && task.proposals.some(p => p.workerId.toString() === req.user._id.toString());
 
-    if (!isClient && !isWorker && !isOpenTaskInquiry) {
-      console.log('Authorization failed:', {
+    console.log('Authorization Flags:', { isClient, isAssignedWorker, hasProposal });
+
+    if (!isClient && !isAssignedWorker && !hasProposal) {
+      console.log('Authorization failed: User is not client, assigned worker, or proposer', {
         userId: req.user._id,
-        clientId: task.clientId,
-        workerId: task.workerId,
-        status: task.status,
-        isClient,
-        isWorker,
-        isOpenTaskInquiry
+        taskId: task._id
       });
       return res.status(403).json({ message: 'Not authorized to send messages for this task' });
     }
 
-    // Check if receiver is valid (either client or worker of the task)
-    if (receiverId !== task.clientId.toString() && 
-        (!task.workerId || receiverId !== task.workerId.toString())) {
-      console.log('Invalid receiver:', {
+    // Check if receiver is valid:
+    // 1. Receiver is the client
+    // 2. Receiver is the assigned worker
+    // 3. Receiver has a proposal for this task
+    const receiverIsClient = task.clientId.toString() === receiverId;
+    const receiverIsAssignedWorker = task.workerId && task.workerId.toString() === receiverId;
+    
+    // Debug: Log all proposers for this task
+    const proposers = task.proposals ? task.proposals.map(p => p.workerId.toString()) : [];
+    console.log('Task Proposers:', proposers);
+    console.log('Checking Receiver ID:', receiverId);
+
+    const receiverIsProposer = proposers.includes(receiverId.toString());
+
+    console.log('Receiver Flags:', { receiverIsClient, receiverIsAssignedWorker, receiverIsProposer });
+
+    if (!receiverIsClient && !receiverIsAssignedWorker && !receiverIsProposer) {
+      console.log('Invalid receiver: Receiver is not client, assigned worker, or proposer', {
         receiverId,
-        clientId: task.clientId,
-        workerId: task.workerId
+        taskId: task._id,
+        proposers
       });
       return res.status(403).json({ message: 'Invalid receiver for this task' });
+    }
+
+    // Additional check: Proposers can only message the client (unless they are assigned)
+    if (hasProposal && !isAssignedWorker && !isClient && !receiverIsClient) {
+      console.log('Authorization failed: Proposer can only message the client', {
+        userId: req.user._id,
+        receiverId
+      });
+      return res.status(403).json({ message: 'Proposers can only message the task client' });
     }
 
     const message = new Message({
@@ -73,8 +93,8 @@ const sendMessage = async (req, res) => {
     await message.save();
 
     // Populate sender and receiver details
-    await message.populate('sender', 'firstName lastName email profileImage');
-    await message.populate('receiver', 'firstName lastName email profileImage');
+    await message.populate('sender', 'firstName lastName email profilePicture');
+    await message.populate('receiver', 'firstName lastName email profilePicture');
 
     res.status(201).json(message);
   } catch (error) {
@@ -103,8 +123,8 @@ const getConversation = async (req, res) => {
         { sender: userId, receiver: currentUserId }
       ]
     })
-      .populate('sender', 'firstName lastName email profileImage')
-      .populate('receiver', 'firstName lastName email profileImage')
+      .populate('sender', 'firstName lastName email profilePicture')
+      .populate('receiver', 'firstName lastName email profilePicture')
       .populate('task', 'title')
       .sort({ createdAt: 1 });
     
@@ -189,7 +209,7 @@ const getConversations = async (req, res) => {
             firstName: "$user.firstName",
             lastName: "$user.lastName",
             email: "$user.email",
-            profileImage: "$user.profileImage"
+            profilePicture: "$user.profilePicture"
           },
           lastMessage: 1,
           unreadCount: 1
@@ -261,9 +281,28 @@ const getTaskMessages = async (req, res) => {
       return res.status(404).json({ message: 'Task not found' });
     }
 
-    // Check if user is authorized to view messages
-    if (task.clientId.toString() !== req.user._id.toString() && 
-        task.workerId.toString() !== req.user._id.toString()) {
+    // Check if user is authorized to view messages:
+    // 1. User is the client
+    // 2. User is the assigned worker
+    // 3. User is a worker who has sent/received messages for this task
+    const isClient = task.clientId && task.clientId.toString() === req.user._id.toString();
+    const isAssignedWorker = task.workerId && task.workerId.toString() === req.user._id.toString();
+    
+    // Check if user has any messages in this task
+    let isParticipant = isClient || isAssignedWorker;
+    
+    if (!isParticipant) {
+      const messageCount = await Message.countDocuments({
+        task: taskId,
+        $or: [
+          { sender: req.user._id },
+          { receiver: req.user._id }
+        ]
+      });
+      isParticipant = messageCount > 0;
+    }
+    
+    if (!isParticipant) {
       return res.status(403).json({ message: 'Not authorized to view messages for this task' });
     }
 
@@ -271,8 +310,8 @@ const getTaskMessages = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
-      .populate('sender', 'name email')
-      .populate('receiver', 'name email');
+      .populate('sender', 'firstName lastName email profilePicture')
+      .populate('receiver', 'firstName lastName email profilePicture');
 
     // Mark messages as read
     await Message.updateMany(

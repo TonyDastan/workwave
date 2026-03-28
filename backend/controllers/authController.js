@@ -18,7 +18,7 @@ const generateToken = (userId) => {
 const register = async (req, res) => {
     try {
         console.log('Register request received:', req.body);
-        const { firstName, lastName, email, password, role, phone } = req.body;
+        const { firstName, lastName, email, password, role, phone, username, address, location } = req.body;
 
         // Check if user already exists
         const existingUser = await User.findOne({ email });
@@ -29,14 +29,16 @@ const register = async (req, res) => {
         // Get profile picture URL from Cloudinary if file was uploaded
         const profilePictureUrl = req.file ? req.file.path : null;
 
-        // Create new user
         const user = new User({
             firstName,
             lastName,
             email,
             password,
+            username: username || email, // Fallback to email if username not provided
             role: role || 'client',
             phone,
+            address,
+            location,
             profilePicture: profilePictureUrl
         });
 
@@ -91,7 +93,8 @@ const login = async (req, res) => {
                 firstName: user.firstName,
                 lastName: user.lastName,
                 email: user.email,
-                role: user.role
+                role: user.role,
+                profilePicture: user.profilePicture
             }
         });
     } catch (error) {
@@ -111,19 +114,46 @@ const getProfile = async (req, res) => {
 
 // Update user profile
 const updateProfile = async (req, res) => {
-    const updates = Object.keys(req.body);
-    const allowedUpdates = ['name', 'email', 'phone', 'bio', 'skills', 'profilePicture'];
-    const isValidOperation = updates.every(update => allowedUpdates.includes(update));
-
-    if (!isValidOperation) {
-        return res.status(400).json({ message: 'Invalid updates' });
-    }
-
     try {
-        updates.forEach(update => req.user[update] = req.body[update]);
-        await req.user.save();
-        res.json(req.user);
+        const user = await User.findById(req.user._id);
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Handle file upload if present (from multer/cloudinary)
+        if (req.file) {
+            user.profilePicture = req.file.path;
+        }
+
+        // Handle other fields
+        const allowedUpdates = [
+            'firstName', 'lastName', 'email', 'phone', 'username',
+            'address', 'location', 'bio', 'skills', 'hourlyRate', 'availability'
+        ];
+
+        console.log('Updating fields from req.body:', req.body);
+        Object.keys(req.body).forEach(update => {
+            if (allowedUpdates.includes(update)) {
+                // Special handling for skills if sent as string (e.g. from FormData)
+                if (update === 'skills' && typeof req.body[update] === 'string') {
+                    try {
+                        user[update] = JSON.parse(req.body[update]);
+                    } catch (e) {
+                        user[update] = req.body[update].split(',').map(s => s.trim());
+                    }
+                } else {
+                    user[update] = req.body[update];
+                }
+            }
+        });
+
+        console.log('Attempting to save user profile changes...');
+        await user.save();
+        console.log('User profile saved successfully');
+        res.json(user);
     } catch (error) {
+        console.error('Update profile error:', error);
+        console.error('Stack trace:', error.stack);
         res.status(400).json({ message: 'Error updating profile', error: error.message });
     }
 };

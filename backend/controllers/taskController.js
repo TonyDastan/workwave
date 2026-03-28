@@ -59,8 +59,8 @@ const getTasks = async (req, res) => {
       .sort(sort)
       .skip((page - 1) * limit)
       .limit(parseInt(limit))
-      .populate('clientId', 'name email rating profileImage')
-      .populate('workerId', 'name email rating profileImage');
+      .populate('clientId', 'firstName lastName email rating profilePicture')
+      .populate('workerId', 'firstName lastName email rating profilePicture');
 
     // Get total count for pagination
     const total = await Task.countDocuments(filter);
@@ -109,12 +109,12 @@ const getTaskById = async (req, res) => {
     console.log('Found task:', task._id);
 
     // Populate related data
-    await task.populate('clientId', 'name email rating profileImage');
+    await task.populate('clientId', 'firstName lastName email rating profilePicture');
     if (task.worker) {
-      await task.populate('workerId', 'name email rating profileImage');
+      await task.populate('workerId', 'firstName lastName email rating profilePicture');
     }
     if (task.proposals && task.proposals.length > 0) {
-      await task.populate('proposals.workerId', 'name email rating profileImage');
+      await task.populate('proposals.workerId', 'firstName lastName email rating profilePicture');
     }
 
     // Transform the response to match frontend expectations
@@ -129,13 +129,22 @@ const getTaskById = async (req, res) => {
       status: task.status,
       isUrgent: task.isUrgent,
       skills: task.skills,
-      clientId: task.clientId._id,
-      clientName: task.clientId.name,
-      clientImage: task.clientId.profileImage,
-      workerId: task.workerId?._id,
+      clientId: task.clientId?._id || task.clientId,
+      clientName: task.clientId?.name || 'Unknown Client',
+      clientPicture: task.clientId?.profilePicture,
+      workerId: task.workerId?._id || task.workerId,
       workerName: task.workerId?.name,
-      workerImage: task.workerId?.profileImage,
-      proposals: task.proposals,
+      workerPicture: task.workerId?.profilePicture,
+      proposals: task.proposals.map(p => {
+        const pObj = p.toObject();
+        return {
+          ...pObj,
+          workerId: p.workerId?._id || p.workerId, // Ensure workerId is an ID string
+          workerName: p.workerName || p.workerId?.name || 'Unknown Worker',
+          workerPicture: p.workerPicture || p.workerId?.profilePicture || null,
+          workerRating: p.workerRating || p.workerId?.rating || 0
+        };
+      }),
       createdAt: task.createdAt,
       updatedAt: task.updatedAt
     };
@@ -183,7 +192,7 @@ const createTask = async (req, res) => {
     });
     
     // Populate client details
-    await task.populate('clientId', 'name email rating profileImage');
+    await task.populate('clientId', 'firstName lastName email rating profilePicture');
     
     res.status(201).json(task);
   } catch (error) {
@@ -330,7 +339,7 @@ const applyForTask = async (req, res) => {
       estimatedTime,
       status: 'pending',
       workerName: `${req.user.firstName} ${req.user.lastName}`,
-      workerImage: req.user.profileImage,
+      workerPicture: req.user.profilePicture,
       workerRating: req.user.rating,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -340,7 +349,7 @@ const applyForTask = async (req, res) => {
     await task.save();
 
     // Populate worker details
-    await task.populate('proposals.workerId', 'firstName lastName email rating profileImage');
+    await task.populate('proposals.workerId', 'firstName lastName email rating profilePicture');
     
     res.status(201).json(task);
   } catch (error) {
@@ -531,22 +540,32 @@ const acceptProposal = async (req, res) => {
       return res.status(400).json({ message: 'This task is no longer accepting proposals' });
     }
     
-    const proposal = task.proposals.find(
-      (proposal) => proposal.workerId.toString() === req.body.workerId
-    );
+    const { workerId, proposalId } = req.body;
     
-    if (!proposal) {
-      return res.status(400).json({ message: 'Proposal not found' });
+    // Find the proposal
+    let proposal;
+    if (proposalId) {
+      proposal = task.proposals.id(proposalId);
+    } else if (workerId) {
+      proposal = task.proposals.find(p => p.workerId.toString() === workerId);
     }
     
+    if (!proposal) {
+      return res.status(404).json({ message: 'Proposal not found' });
+    }
+    
+    // Get the worker ID from the proposal
+    const actualWorkerId = proposal.workerId;
+    
     // Update task status and assign worker
-    task.worker = req.body.workerId;
+    task.workerId = actualWorkerId;
     task.status = 'assigned';
+    proposal.status = 'accepted';
     
     // Update all other proposals to rejected
-    task.proposals.forEach(proposal => {
-      if (proposal.workerId.toString() !== req.body.workerId) {
-        proposal.status = 'rejected';
+    task.proposals.forEach(p => {
+      if (p._id.toString() !== proposal._id.toString()) {
+        p.status = 'rejected';
       }
     });
     
@@ -575,9 +594,7 @@ const rejectProposal = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to reject proposals for this task' });
     }
     
-    const proposal = task.proposals.find(
-      (p) => p._id.toString() === req.params.proposalId
-    );
+    const proposal = task.proposals.id(req.params.proposalId);
     
     if (!proposal) {
       return res.status(404).json({ message: 'Proposal not found' });
@@ -605,9 +622,7 @@ const withdrawProposal = async (req, res) => {
       return res.status(404).json({ message: 'Task not found' });
     }
     
-    const proposal = task.proposals.find(
-      (p) => p._id.toString() === req.params.proposalId
-    );
+    const proposal = task.proposals.id(req.params.proposalId);
     
     if (!proposal) {
       return res.status(404).json({ message: 'Proposal not found' });
@@ -637,29 +652,54 @@ const withdrawProposal = async (req, res) => {
 // @access  Private (Worker only)
 const getWorkerProposals = async (req, res) => {
   try {
+    console.log(`Getting proposals for worker: ${req.user._id}`);
     const tasks = await Task.find(
       { 'proposals.workerId': req.user._id },
-      { title: 1, status: 1, budget: 1, deadline: 1, category: 1, proposals: 1 }
+      { title: 1, status: 1, budget: 1, deadline: 1, category: 1, proposals: 1, clientId: 1, location: 1, isUrgent: 1 }
     )
     .populate('clientId', 'firstName lastName email rating profilePicture')
     .sort('-createdAt');
 
-    // Return only the matching proposal inside each task
+    console.log(`Found ${tasks.length} tasks with proposals from this worker`);
+
+    // Return only the matching proposal inside each task, including client info
     const workerProposals = tasks.map(task => {
       const proposal = task.proposals.find(
         p => p.workerId.toString() === req.user._id.toString()
       );
-      return {
+      
+      if (!proposal) return null;
+
+      const client = task.clientId;
+      const clientName = client ? `${client.firstName} ${client.lastName}` : 'Unknown Client';
+      const clientPicture = client ? client.profilePicture : null;
+
+      const result = {
+        _id: proposal._id,
+        workerId: proposal.workerId,
+        coverLetter: proposal.coverLetter,
+        proposedBudget: proposal.proposedBudget,
+        estimatedTime: proposal.estimatedTime,
+        status: proposal.status,
+        createdAt: proposal.createdAt,
+        updatedAt: proposal.updatedAt,
         taskId: task._id,
         taskTitle: task.title,
         taskStatus: task.status,
         taskBudget: task.budget,
         taskDeadline: task.deadline,
         taskCategory: task.category,
-        proposal
+        taskLocation: task.location,
+        taskIsUrgent: task.isUrgent,
+        clientId: client ? client._id : null,
+        clientName,
+        clientPicture
       };
-    });
+      
+      return result;
+    }).filter(p => p !== null);
 
+    console.log('Sample worker proposal data:', JSON.stringify(workerProposals[0], null, 2));
     res.json(workerProposals);
   } catch (error) {
     console.error('Get worker proposals error:', error);
@@ -676,10 +716,25 @@ const getTasksWithProposals = async (req, res) => {
       clientId: req.user._id,
       'proposals.0': { $exists: true } // Only tasks with at least one proposal
     })
-    .populate('proposals.workerId', 'name email rating profileImage')
+    .populate('proposals.workerId', 'firstName lastName email rating profilePicture')
     .sort('-createdAt');
 
-    res.json(tasks);
+    // Map tasks to ensure consistent proposal structure for the frontend
+    const mappedTasks = tasks.map(task => {
+      const taskObj = task.toObject();
+      return {
+        ...taskObj,
+        proposals: task.proposals.map(p => ({
+          ...p.toObject(),
+          workerId: p.workerId?._id || p.workerId, // Ensure workerId is an ID string
+          workerName: p.workerName || p.workerId?.name || 'Unknown Worker',
+          workerPicture: p.workerPicture || p.workerId?.profilePicture || null,
+          workerRating: p.workerRating || p.workerId?.rating || 0
+        }))
+      };
+    });
+
+    res.json(mappedTasks);
   } catch (error) {
     console.error('Get tasks with proposals error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });

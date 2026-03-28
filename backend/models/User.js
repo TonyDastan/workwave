@@ -19,6 +19,12 @@ const userSchema = new mongoose.Schema({
     trim: true,
     lowercase: true
   },
+  username: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true
+  },
   password: {
     type: String,
     required: true,
@@ -49,8 +55,24 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  address: {
+    type: String,
+    trim: true
+  },
+  location: {
+    type: String,
+    trim: true
+  },
   profilePicture: {
     type: String
+  },
+  hourlyRate: {
+    type: Number,
+    default: 0
+  },
+  availability: {
+    type: String,
+    trim: true
   },
   isVerified: {
     type: Boolean,
@@ -65,7 +87,20 @@ const userSchema = new mongoose.Schema({
     default: Date.now
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Virtual for full name
+userSchema.virtual('name').get(function() {
+  return `${this.firstName} ${this.lastName}`;
+});
+
+userSchema.virtual('name').set(function(name) {
+  const parts = name.split(' ');
+  this.firstName = parts[0];
+  this.lastName = parts.slice(1).join(' ');
 });
 
 // Hash password before saving
