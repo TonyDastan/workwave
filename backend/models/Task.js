@@ -114,7 +114,7 @@ const taskSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['open', 'assigned', 'completed', 'cancelled'],
+        enum: ['open', 'assigned', 'in-progress', 'completed', 'cancelled'],
         default: 'open'
     },
     clientId: {

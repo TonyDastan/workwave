@@ -110,7 +110,7 @@ const getTaskById = async (req, res) => {
 
     // Populate related data
     await task.populate('clientId', 'firstName lastName email rating profilePicture');
-    if (task.worker) {
+    if (task.workerId) {
       await task.populate('workerId', 'firstName lastName email rating profilePicture');
     }
     if (task.proposals && task.proposals.length > 0) {
@@ -135,6 +135,7 @@ const getTaskById = async (req, res) => {
       workerId: task.workerId?._id || task.workerId,
       workerName: task.workerId?.name,
       workerPicture: task.workerId?.profilePicture,
+      rating: task.rating,
       proposals: task.proposals.map(p => {
         const pObj = p.toObject();
         return {
@@ -428,7 +429,7 @@ const updateTaskStatus = async (req, res) => {
     
     // Check authorization
     const isClient = task.clientId.toString() === req.user._id.toString();
-    const isWorker = task.worker && task.worker.toString() === req.user._id.toString();
+    const isWorker = task.workerId && task.workerId.toString() === req.user._id.toString();
     
     if (!isClient && !isWorker) {
       return res.status(403).json({ message: 'Not authorized to update this task status' });
@@ -447,9 +448,9 @@ const updateTaskStatus = async (req, res) => {
     task.status = status;
     
     // If completed, increment the worker's completed tasks count
-    if (status === 'completed' && task.worker) {
+    if (status === 'completed' && task.workerId) {
       await User.findByIdAndUpdate(
-        task.worker,
+        task.workerId,
         { $inc: { completedTasks: 1 } }
       );
     }
@@ -500,10 +501,10 @@ const rateWorker = async (req, res) => {
     task.rating = rating;
     
     // Update worker's average rating
-    if (task.worker) {
-      const worker = await User.findById(task.worker);
+    if (task.workerId) {
+      const worker = await User.findById(task.workerId);
       if (worker) {
-        const workerTasks = await Task.find({ worker: task.worker, rating: { $exists: true } });
+        const workerTasks = await Task.find({ workerId: task.workerId, rating: { $exists: true } });
         const totalRating = workerTasks.reduce((sum, t) => sum + t.rating, 0) + rating;
         worker.rating = totalRating / (workerTasks.length + 1);
         await worker.save();
@@ -655,7 +656,7 @@ const getWorkerProposals = async (req, res) => {
     console.log(`Getting proposals for worker: ${req.user._id}`);
     const tasks = await Task.find(
       { 'proposals.workerId': req.user._id },
-      { title: 1, status: 1, budget: 1, deadline: 1, category: 1, proposals: 1, clientId: 1, location: 1, isUrgent: 1 }
+      { title: 1, status: 1, budget: 1, deadline: 1, category: 1, proposals: 1, clientId: 1, location: 1, isUrgent: 1, rating: 1 }
     )
     .populate('clientId', 'firstName lastName email rating profilePicture')
     .sort('-createdAt');
@@ -693,7 +694,8 @@ const getWorkerProposals = async (req, res) => {
         taskIsUrgent: task.isUrgent,
         clientId: client ? client._id : null,
         clientName,
-        clientPicture
+        clientPicture,
+        taskRating: task.rating
       };
       
       return result;
