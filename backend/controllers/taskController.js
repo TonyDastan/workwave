@@ -392,7 +392,7 @@ const assignWorker = async (req, res) => {
     }
     
     // Assign worker and update status
-    task.worker = workerId;
+    task.workerId = workerId;
     task.status = 'assigned';
     
     const updatedTask = await task.save();

@@ -22,8 +22,8 @@ const createReview = async (req, res) => {
     }
     
     // Check if user is either client or worker of the task
-    const isClient = task.client.toString() === req.user._id.toString();
-    const isWorker = task.worker && task.worker.toString() === req.user._id.toString();
+    const isClient = task.clientId.toString() === req.user._id.toString();
+    const isWorker = task.workerId && task.workerId.toString() === req.user._id.toString();
     
     if (!isClient && !isWorker) {
       return res.status(403).json({ message: 'You can only review tasks you were directly involved in' });
@@ -80,7 +80,7 @@ const getUserReviews = async (req, res) => {
     const userId = req.params.userId;
     
     const reviews = await Review.find({ reviewee: userId })
-      .populate('reviewer', 'name profileImage')
+      .populate('reviewer', 'firstName lastName profilePicture')
       .populate('task', 'title')
       .sort({ createdAt: -1 });
       
@@ -99,8 +99,8 @@ const getTaskReviews = async (req, res) => {
     const taskId = req.params.taskId;
     
     const reviews = await Review.find({ task: taskId })
-      .populate('reviewer', 'name profileImage')
-      .populate('reviewee', 'name profileImage')
+      .populate('reviewer', 'firstName lastName profilePicture')
+      .populate('reviewee', 'firstName lastName profilePicture')
       .sort({ createdAt: -1 });
       
     res.json(reviews);

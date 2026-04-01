@@ -10,8 +10,6 @@ const connectDB = async () => {
         console.log('Connecting to MongoDB...');
         
         await mongoose.connect(MONGODB_URI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
             serverApi: {
                 version: ServerApiVersion.v1,
                 strict: true,

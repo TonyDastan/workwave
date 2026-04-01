@@ -42,27 +42,27 @@ if (!fs.existsSync('uploads')) {
   fs.mkdirSync('uploads');
 }
 
-// Detailed request logging
-app.use((req, res, next) => {
-  console.log('=== Incoming Request ===');
-  console.log(`${req.method} ${req.url}`);
-  console.log('Headers:', req.headers);
-  console.log('Body:', req.body);
-  console.log('=====================');
-  next();
-});
+// Detailed request logging (development only)
+if (process.env.NODE_ENV === 'development') {
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+  });
+}
 
 // API Routes
 const authRoutes = require('./routes/authRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const taskRoutes = require('./routes/taskRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
 
 // Mount API routes with file upload middleware
 app.use('/api/auth', upload.single('profilePicture'), authRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/upload', upload.single('file'), uploadRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 // Test route to verify server is running
 app.get('/api/test', (req, res) => {

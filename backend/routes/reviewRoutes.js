@@ -5,7 +5,7 @@ const {
   getUserReviews,
   getTaskReviews,
 } = require('../controllers/reviewController');
-const auth = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 
 // Public routes
 router.get('/user/:userId', getUserReviews);
